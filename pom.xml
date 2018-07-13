@@ -62,9 +62,31 @@
 
     <repositories>
         <repository>
-            <id>confluent</id>
-            <name>Confluent</name>
-            <url>${confluent.maven.repo}</url>
+          <id>rr-public</id>
+          <name>RichRelevance Corporate Repository</name>
+          <url>https://repo.richrelevance.com/content/groups/public/</url>
+          <layout>default</layout>
+          <releases>
+              <enabled>true</enabled>
+              <updatePolicy>never</updatePolicy>
+          </releases>
+          <snapshots>
+              <enabled>false</enabled>
+          </snapshots>
+        </repository>
+        <repository>
+          <id>rr-public-snapshots</id>
+          <name>RichRelevance Corporate Snapshots Repository</name>
+          <url>https://repo.richrelevance.com/content/groups/public.snapshots/</url>
+          <layout>default</layout>
+          <releases>
+              <enabled>false</enabled>
+          </releases>
+          <snapshots>
+              <enabled>true</enabled>
+              <updatePolicy>daily</updatePolicy>
+              <checksumPolicy>ignore</checksumPolicy>
+          </snapshots>
         </repository>
     </repositories>
 
