@@ -76,7 +76,7 @@ public class AvroData {
   public static final String VALUE_FIELD = "value";
 
   public static final String CONNECT_NAME_PROP = "connect.name";
-  public static final String CONNECT_DOC_PROP = "connect.doc";
+  public static final String CONNECT_FIELD_DOC_PREFIX_PROP = "connect.field.doc.";
   public static final String CONNECT_RECORD_DOC_PROP = "connect.record.doc";
   public static final String CONNECT_ENUM_DOC_PROP = "connect.enum.doc";
   public static final String CONNECT_VERSION_PROP = "connect.version";
@@ -861,10 +861,19 @@ public class AvroData {
               org.apache.avro.SchemaBuilder.record(name != null ? name : DEFAULT_SCHEMA_NAME)
                   .namespace(namespace)
                   .doc(doc).fields();
+          Map<String, String> fieldDocs = new HashMap<>();
           for (Field field : schema.fields()) {
             addAvroRecordField(fieldAssembler, field.name(), field.schema(), schemaMap);
+            if (field.schema().doc() != null) {
+              fieldDocs.put(CONNECT_FIELD_DOC_PREFIX_PROP + field.name(), field.schema().doc());
+            }
           }
           baseSchema = fieldAssembler.endRecord();
+          if (connectMetaData) {
+            for (Map.Entry<String, String> fieldDoc : fieldDocs.entrySet()) {
+              baseSchema.addProp(fieldDoc.getKey(), fieldDoc.getValue());
+            }
+          }
         }
         break;
       default:
@@ -874,9 +883,9 @@ public class AvroData {
     org.apache.avro.Schema finalSchema = baseSchema;
     if (!baseSchema.getType().equals(org.apache.avro.Schema.Type.UNION)) {
       if (connectMetaData) {
-        if (schema.doc() != null) {
-          baseSchema.addProp(CONNECT_DOC_PROP, schema.doc());
-        }
+        // schema.doc() cannot be added as a CONNECT_DOC_PROP cannot be added as a property of
+        // the schema because it refers to the field doc of a containing record
+        // See #1042
         if (schema.version() != null) {
           baseSchema.addProp(CONNECT_VERSION_PROP,
                              JsonNodeFactory.instance.numberNode(schema.version()));
@@ -1373,12 +1382,12 @@ public class AvroData {
    *                        one; used when converting Avro record fields since they define default
    *                        values with the field spec, but Connect specifies them with the field's
    *                        schema
-   * @param docDefaultVal   if non-null, override any connect-annotated documentation with this one;
+   * @param fieldDocVal     if non-null, override any connect-annotated documentation with this one;
    *                        used when converting Avro record fields since they define doc values
    *                        with the field spec, but Connect specifies them with the field's schema
    */
   private Schema toConnectSchema(org.apache.avro.Schema schema, boolean forceOptional,
-                                 Object fieldDefaultVal, String docDefaultVal) {
+                                 Object fieldDefaultVal, String fieldDocVal) {
     String type = schema.getProp(CONNECT_TYPE_PROP);
     String logicalType = schema.getProp(AVRO_LOGICAL_TYPE_PROP);
 
@@ -1483,8 +1492,10 @@ public class AvroData {
       case RECORD: {
         builder = SchemaBuilder.struct();
         for (org.apache.avro.Schema.Field field : schema.getFields()) {
+          String fieldDoc = field.doc() != null ? field.doc() :
+              schema.getProp(CONNECT_FIELD_DOC_PREFIX_PROP + field.name());
           Schema fieldSchema = toConnectSchema(field.schema(), false, field.defaultValue(),
-                                               field.doc());
+                                               fieldDoc);
           builder.field(field.name(), fieldSchema);
         }
         break;
@@ -1507,7 +1518,7 @@ public class AvroData {
           if (schema.getTypes().contains(NULL_AVRO_SCHEMA)) {
             for (org.apache.avro.Schema memberSchema : schema.getTypes()) {
               if (!memberSchema.equals(NULL_AVRO_SCHEMA)) {
-                return toConnectSchema(memberSchema, true, null, docDefaultVal);
+                return toConnectSchema(memberSchema, true, null, fieldDocVal);
               }
             }
           }
@@ -1540,10 +1551,8 @@ public class AvroData {
                                 + schema.getType().getName() + ".");
     }
 
-    String docVal = docDefaultVal != null ? docDefaultVal :
-                    (schema.getDoc() != null ? schema.getDoc() : schema.getProp(CONNECT_DOC_PROP));
-    if (docVal != null) {
-      builder.doc(docVal);
+    if (fieldDocVal != null) {
+      builder.doc(fieldDocVal);
     }
     if (schema.getDoc() != null) {
       builder.parameter(CONNECT_RECORD_DOC_PROP, schema.getDoc());
