@@ -269,7 +269,6 @@ public class AvroDataTest {
     // One field has some extra data set on it to ensure it gets passed through via the fields
     // config
     org.apache.avro.Schema int8Schema = org.apache.avro.SchemaBuilder.builder().intType();
-    int8Schema.addProp("connect.default", JsonNodeFactory.instance.numberNode(2));
     int8Schema.addProp("connect.type", "int8");
     org.apache.avro.Schema int16Schema = org.apache.avro.SchemaBuilder.builder().intType();
     int16Schema.addProp("connect.type", "int16");
@@ -290,6 +289,7 @@ public class AvroDataTest {
         .name("mapNonStringKeys").type().array().items(complexMapElementSchema).noDefault()
         .endRecord();
     avroSchema.addProp("connect.field.doc.int8", "int8 field");
+    avroSchema.addProp("connect.field.default.int8", 2);
     org.apache.avro.generic.GenericRecord avroRecord
         = new org.apache.avro.generic.GenericRecordBuilder(avroSchema)
         .set("int8", 12)
@@ -436,7 +436,6 @@ public class AvroDataTest {
     avroStringSchema.addProp("connect.name", "io.confluent.stringtype");
     avroStringSchema.addProp("connect.version",
                              JsonNodeFactory.instance.numberNode(2));
-    avroStringSchema.addProp("connect.default", "foo");
     ObjectNode params = JsonNodeFactory.instance.objectNode();
     params.put("foo", "bar");
     params.put("baz", "baz");
@@ -778,6 +777,9 @@ public class AvroDataTest {
     avroSchema.getField("parent").schema().getTypes().get(0).addProp("connect.name", "A");
     avroSchema.getField("parent").schema().getTypes().get(1).addProp("connect.name", "B");
     avroSchema.addProp("connect.name", "Parent");
+    ObjectNode objectNode = JsonNodeFactory.instance.objectNode();
+    objectNode.put("a", JsonNodeFactory.instance.numberNode(1));
+    avroSchema.addProp("connect.field.default.parent", objectNode);
     assertEquals(avroSchema, fromConnectSchema);
   }
 
@@ -796,6 +798,7 @@ public class AvroDataTest {
     Schema toConnectSchema = avroData.toConnectSchema(avroSchema);
     org.apache.avro.Schema schema = avroData.fromConnectSchema(toConnectSchema);
     avroSchema.addProp("connect.name", "Parent");
+    avroSchema.addProp("connect.field.default.parent", 1);
     assertEquals(avroSchema, schema);
   }
 
@@ -814,6 +817,7 @@ public class AvroDataTest {
     Schema toConnectSchema = avroData.toConnectSchema(avroSchema);
     org.apache.avro.Schema schema = avroData.fromConnectSchema(toConnectSchema);
     avroSchema.addProp("connect.name", "Parent");
+    avroSchema.addProp("connect.field.default.parent", "x");
     assertEquals(avroSchema, schema);
   }
 
@@ -1461,32 +1465,6 @@ public class AvroDataTest {
             avroData.toConnectData(avroSchema, "bar"));
     assertEquals(new SchemaAndValue(builder.build(), "bar"),
             avroData.toConnectData(avroSchema, new GenericData.EnumSymbol(avroSchema, "bar")));
-  }
-
-  @Test
-  public void testToConnectOptionalPrimitiveWithConnectMetadata() {
-    Schema schema = SchemaBuilder.string().
-        defaultValue("foo").name("io.confluent.stringtype").version(2).optional()
-        .parameter("foo", "bar").parameter("baz", "baz")
-        .build();
-
-    org.apache.avro.Schema avroStringSchema = org.apache.avro.SchemaBuilder.builder().stringType();
-    avroStringSchema.addProp("connect.name", "io.confluent.stringtype");
-    avroStringSchema.addProp("connect.version",
-                             JsonNodeFactory.instance.numberNode(2));
-    avroStringSchema.addProp("connect.default", "foo");
-    ObjectNode params = JsonNodeFactory.instance.objectNode();
-    params.put("foo", "bar");
-    params.put("baz", "baz");
-    avroStringSchema.addProp("connect.parameters", params);
-    org.apache.avro.Schema avroSchema =
-        org.apache.avro.SchemaBuilder.builder().unionOf()
-            .type(avroStringSchema).and()
-            .nullType().endUnion();
-
-
-    assertEquals(new SchemaAndValue(schema, "string"),
-                 avroData.toConnectData(avroSchema, "string"));
   }
 
   @Test

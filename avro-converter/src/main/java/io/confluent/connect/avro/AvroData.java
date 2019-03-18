@@ -80,7 +80,7 @@ public class AvroData {
   public static final String CONNECT_RECORD_DOC_PROP = "connect.record.doc";
   public static final String CONNECT_ENUM_DOC_PROP = "connect.enum.doc";
   public static final String CONNECT_VERSION_PROP = "connect.version";
-  public static final String CONNECT_DEFAULT_VALUE_PROP = "connect.default";
+  public static final String CONNECT_FIELD_DEFAULT_VALUE_PREFIX_PROP = "connect.field.default.";
   public static final String CONNECT_PARAMETERS_PROP = "connect.parameters";
 
   public static final String CONNECT_TYPE_PROP = "connect.type";
@@ -862,16 +862,24 @@ public class AvroData {
                   .namespace(namespace)
                   .doc(doc).fields();
           Map<String, String> fieldDocs = new HashMap<>();
+          Map<String, JsonNode> fieldDefaultValues = new HashMap<>();
           for (Field field : schema.fields()) {
             addAvroRecordField(fieldAssembler, field.name(), field.schema(), schemaMap);
             if (field.schema().doc() != null) {
               fieldDocs.put(CONNECT_FIELD_DOC_PREFIX_PROP + field.name(), field.schema().doc());
+            }
+            if (field.schema().defaultValue() != null) {
+              fieldDefaultValues.put(CONNECT_FIELD_DEFAULT_VALUE_PREFIX_PROP + field.name(),
+                  defaultValueFromConnect(field.schema(), field.schema().defaultValue()));
             }
           }
           baseSchema = fieldAssembler.endRecord();
           if (connectMetaData) {
             for (Map.Entry<String, String> fieldDoc : fieldDocs.entrySet()) {
               baseSchema.addProp(fieldDoc.getKey(), fieldDoc.getValue());
+            }
+            for (Map.Entry<String, JsonNode> fieldDefaultValue : fieldDefaultValues.entrySet()) {
+              baseSchema.addProp(fieldDefaultValue.getKey(), fieldDefaultValue.getValue());
             }
           }
         }
@@ -883,8 +891,8 @@ public class AvroData {
     org.apache.avro.Schema finalSchema = baseSchema;
     if (!baseSchema.getType().equals(org.apache.avro.Schema.Type.UNION)) {
       if (connectMetaData) {
-        // schema.doc() cannot be added as a CONNECT_DOC_PROP cannot be added as a property of
-        // the schema because it refers to the field doc of a containing record
+        // schema.doc() is a property of the avro field, not of the avro schema;
+        // schema.defaultValue() is a property of the avro field,not of the avro schema;
         // See #1042
         if (schema.version() != null) {
           baseSchema.addProp(CONNECT_VERSION_PROP,
@@ -892,10 +900,6 @@ public class AvroData {
         }
         if (schema.parameters() != null) {
           baseSchema.addProp(CONNECT_PARAMETERS_PROP, parametersFromConnect(schema.parameters()));
-        }
-        if (schema.defaultValue() != null) {
-          baseSchema.addProp(CONNECT_DEFAULT_VALUE_PROP,
-                             defaultValueFromConnect(schema, schema.defaultValue()));
         }
         if (schema.name() != null) {
           baseSchema.addProp(CONNECT_NAME_PROP, schema.name());
@@ -1494,7 +1498,9 @@ public class AvroData {
         for (org.apache.avro.Schema.Field field : schema.getFields()) {
           String fieldDoc = field.doc() != null ? field.doc() :
               schema.getProp(CONNECT_FIELD_DOC_PREFIX_PROP + field.name());
-          Schema fieldSchema = toConnectSchema(field.schema(), false, field.defaultValue(),
+          Object fieldDefaultValue = field.defaultValue() != null ? field.defaultValue() :
+              schema.getProp(CONNECT_FIELD_DEFAULT_VALUE_PREFIX_PROP + field.name());
+          Schema fieldSchema = toConnectSchema(field.schema(), false, fieldDefaultValue,
                                                fieldDoc);
           builder.field(field.name(), fieldSchema);
         }
@@ -1607,9 +1613,6 @@ public class AvroData {
       }
     }
 
-    if (fieldDefaultVal == null) {
-      fieldDefaultVal = schema.getJsonProp(CONNECT_DEFAULT_VALUE_PROP);
-    }
     if (fieldDefaultVal != null) {
       Object value = defaultValueFromAvro(builder, schema, fieldDefaultVal);
       builder.defaultValue(value);
